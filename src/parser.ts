@@ -272,11 +272,25 @@ const newLine = char("\n").map(
 )
 
 export function getProgrammParser() {
-	const commentParser = regex(/^(\s)*--(.*)(\s)*/).map(
-		(content): TopLevelType => {
-			return { type: "comment", content }
-		}
-	)
+	const commentParser = contextual(function* (): CustomGenerator<
+		Parser<any, string, any>,
+		string,
+		string
+	> {
+		yield optionalWhitespace
+
+		yield str("--")
+
+		yield optionalWhitespace
+
+		const content = yield regex(/^[^\n]*/)
+
+		yield newLine
+
+		return content
+	}).map((content): TopLevelType => {
+		return { type: "comment", content }
+	})
 
 	const typeParser: Parser<TopLevelType, string, any> = contextual<Type>(
 		function* (): CustomGenerator<Parser<any, string, any>, Type, string> {
