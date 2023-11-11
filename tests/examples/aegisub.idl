@@ -2,7 +2,7 @@
 
 -- object types or type aliases
 
-type OptionalString = optional<union<string, null, undefined>>;
+type OptionalString = optional<union<string, null, undefined>>
 
 -- optional is only valid in arguments and arrays and only trailing, and in objects!
 type ScriptPropertiesOption1 = arguments<string, OptionalString, OptionalString, OptionalString>
@@ -14,12 +14,11 @@ object ScriptPropertiesOption2 {
     version: OptionalString
 }
 
-type ScriptProperties = union<ScriptPropertiesOption1, arguments<ScriptPropertiesOption2>>; 
+type ScriptProperties = union<ScriptPropertiesOption1, arguments<ScriptPropertiesOption2>>
 
 -- module [az] {values}
 
--- type can be builtin: string | void | int | float | number | boolean | array<...types> | union<...types> | arguments<...types> | function<arguments<input>, return> | null | undefined | optional<type> | false | true | "string literal"
--- or custom with UpperCase start 
+-- type can be builtin: string | void | int | float | number | boolean | array<...types> | union<...types> | arguments<...types> | function<arguments<..types>| Custom, type> | null | undefined | optional<type> | false | true | "string literal" | Custom
 
 module aegisub {
     version: string

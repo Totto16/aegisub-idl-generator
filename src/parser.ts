@@ -49,6 +49,22 @@ interface OptionalType {
 	content: TopLevelType
 }
 
+interface UnionType {
+	type: "union"
+	types: TopLevelType[]
+}
+
+interface ArgumentsType {
+	type: "arguments"
+	types: TopLevelType[]
+}
+
+interface FunctionType {
+	type: "function"
+	arguments: ArgumentsType | CustomNameType
+	return: TopLevelType
+}
+
 type LiteralKeys =
 	| "string"
 	| "void"
@@ -89,22 +105,9 @@ type TopLevelType =
 	| StringLiteralType
 	| CustomNameType
 	| OptionalType
-
-interface UnionType {
-	__type: "union"
-	types: TopLevelType[]
-}
-
-interface ArgumentType {
-	__type: "argument"
-	types: TopLevelType[]
-}
-
-interface FunctionType {
-	__type: "function"
-	arguments: ArgumentType
-	return: TopLevelType
-}
+	| UnionType
+	| ArgumentsType
+	| FunctionType
 
 const customTypeName = lookAheadSequenceIgnore(
 	regex(/^[A-Z]{1}/),
@@ -180,9 +183,13 @@ function getInternalTypeParser() {
 				literalParser("undefined"),
 				literalParser("false"),
 				literalParser("true"),
+				customTypeName,
 				stringLiteralParser,
 				arrayParser,
 				optionalParser,
+				unionParser,
+				argumentsParser,
+				functionParser,
 			])
 	)
 }
@@ -235,6 +242,95 @@ const optionalParser: Parser<TopLevelType, string, any> =
 			return {
 				type: "optional",
 				content,
+			}
+		})
+	)
+
+const unionParser: Parser<TopLevelType, string, any> = lookAheadSequenceIgnore(
+	str("union"),
+	contextual(function* (): CustomGenerator<
+		Parser<any, string, any>,
+		TopLevelType,
+		string
+	> {
+		yield str("union")
+		yield char("<")
+
+		yield optionalWhitespace
+
+		const types = (yield sepBy(sequenceOf([char(","), optionalWhitespace]))(
+			getInternalTypeParser()
+		)) as unknown as TopLevelType[]
+
+		yield optionalWhitespace
+
+		yield char(">")
+		return {
+			type: "union",
+			types,
+		}
+	})
+)
+
+const argumentsParser: Parser<TopLevelType, string, any> =
+	lookAheadSequenceIgnore(
+		str("arguments"),
+		contextual(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			TopLevelType,
+			string
+		> {
+			yield str("arguments")
+			yield char("<")
+
+			yield optionalWhitespace
+
+			const types = (yield sepBy(
+				sequenceOf([char(","), optionalWhitespace])
+			)(getInternalTypeParser())) as unknown as TopLevelType[]
+
+			yield optionalWhitespace
+
+			yield char(">")
+			return {
+				type: "arguments",
+				types,
+			}
+		})
+	)
+
+const functionParser: Parser<TopLevelType, string, any> =
+	lookAheadSequenceIgnore(
+		str("function"),
+		contextual(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			TopLevelType,
+			string
+		> {
+			yield str("function")
+			yield char("<")
+
+			yield optionalWhitespace
+
+			const argumentsContent = (yield choice([
+				argumentsParser,
+				customTypeName,
+			])) as unknown as ArgumentsType | CustomNameType
+
+			yield optionalWhitespace
+			yield char(",")
+			yield optionalWhitespace
+
+			const returnContent =
+				(yield getInternalTypeParser()) as unknown as TopLevelType
+
+			yield optionalWhitespace
+
+			yield char(">")
+			return {
+				type: "function",
+				arguments: argumentsContent,
+				return: returnContent,
 			}
 		})
 	)

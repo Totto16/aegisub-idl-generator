@@ -18,3 +18,12 @@ type EscapedLiteral = "\" \\ \n \r \t"
 
 
 type Test = optional<null>
+
+
+type Test2 = union<Test, U>
+
+type IU = argument<optional<string>>
+
+type Func = function<argument<union<null, number>>, float> 
+
+type Func2 = function<Func, "test"> 

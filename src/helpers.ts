@@ -14,7 +14,6 @@ function parseOffset(content: string, inputOffset: number): Offset {
 		const length = lineContent.length + 1
 
 		if (inputOffset - count < length) {
-			console.log(inputOffset, count, inputOffset - count)
 			return {
 				line,
 				offset: inputOffset - count + 1,
