@@ -7,14 +7,16 @@ import {
 	str,
 	succeedWith,
 	sequenceOf,
-	endOfInput,
 	lookAhead,
 	recursiveParser,
+	anyChar,
 } from "arcsecond"
 import {
 	CustomGenerator,
 	contextual,
+	lookAheadSequenceIgnore,
 	optionalWhitespace,
+	untilEndOfInput,
 	whitespace,
 } from "./parsers"
 
@@ -40,6 +42,11 @@ interface CustomTypeType {
 interface ArrayType {
 	type: "array"
 	types: TopLevelType[]
+}
+
+interface OptionalType {
+	type: "optional"
+	content: TopLevelType
 }
 
 type LiteralKeys =
@@ -81,6 +88,7 @@ type TopLevelType =
 	| LiteralType
 	| StringLiteralType
 	| CustomNameType
+	| OptionalType
 
 interface UnionType {
 	__type: "union"
@@ -98,25 +106,65 @@ interface FunctionType {
 	return: TopLevelType
 }
 
-interface OptionalType {
-	__type: "optional"
-	type: TopLevelType
-}
+const customTypeName = lookAheadSequenceIgnore(
+	regex(/^[A-Z]{1}/),
+	regex(/^[A-Z]{1}[a-zA-Z0-9]*/)
+		.errorMap((err) => {
+			return err.error.replace(
+				"matching '/^[A-Z]{1}[a-zA-Z0-9]*/'",
+				"to be a custom type name (starts with"
+			)
+		})
+		.map((name): TopLevelType => ({ type: "customTypeName", name }))
+)
 
-const customTypeName = regex(/^[A-Z]{1}[a-zA-Z0-9]*/)
-	.errorMap((err) => {
-		return err.error.replace(
-			"matching '/^[A-Z]{1}[a-zA-Z0-9]*/'",
-			"to be a custom type name (starts with"
-		)
-	})
-	.map((name): TopLevelType => ({ type: "customTypeName", name }))
+const stringLiteralParser: Parser<TopLevelType, string, any> =
+	lookAheadSequenceIgnore(
+		char('"'),
+		contextual(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			TopLevelType,
+			string
+		> {
+			yield char('"')
+
+			const result: string[] = []
+
+			while (true) {
+				const isPotentialEnd: "no" | '"' | string = yield lookAhead(
+					char('"')
+				).errorChain(() => succeedWith("no"))
+
+				//TODO: in typecheck chek if all escape sequences inside the string are valid e.g. \n vs \i vs \\i
+
+				if (isPotentialEnd === "no") {
+					result.push(yield anyChar)
+				} else {
+					if (result.at(-1) === "\\") {
+						result.push(yield char('"'))
+					} else {
+						break
+					}
+				}
+			}
+
+			yield char('"')
+
+			return {
+				type: "stringLiteral",
+				value: result.join(""),
+			}
+		})
+	)
 
 function getInternalTypeParser() {
 	const literalParser = (
 		name: LiteralKeys
 	): Parser<TopLevelType, string, any> => {
-		return str(name).map((): TopLevelType => ({ type: name }))
+		return lookAheadSequenceIgnore(
+			regex(/^[a-z]{1}/),
+			str(name).map((): TopLevelType => ({ type: name }))
+		)
 	}
 
 	return recursiveParser(
@@ -132,13 +180,16 @@ function getInternalTypeParser() {
 				literalParser("undefined"),
 				literalParser("false"),
 				literalParser("true"),
+				stringLiteralParser,
 				arrayParser,
+				optionalParser,
 			])
 	)
 }
 
-const arrayParser: Parser<TopLevelType, string, any> = contextual(
-	function* (): CustomGenerator<
+const arrayParser: Parser<TopLevelType, string, any> = lookAheadSequenceIgnore(
+	str("array"),
+	contextual(function* (): CustomGenerator<
 		Parser<any, string, any>,
 		TopLevelType,
 		string
@@ -159,8 +210,34 @@ const arrayParser: Parser<TopLevelType, string, any> = contextual(
 			type: "array",
 			types,
 		}
-	}
+	})
 )
+
+const optionalParser: Parser<TopLevelType, string, any> =
+	lookAheadSequenceIgnore(
+		str("optional"),
+		contextual(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			TopLevelType,
+			string
+		> {
+			yield str("optional")
+			yield char("<")
+
+			yield optionalWhitespace
+
+			const content =
+				(yield getInternalTypeParser()) as unknown as TopLevelType
+
+			yield optionalWhitespace
+
+			yield char(">")
+			return {
+				type: "optional",
+				content,
+			}
+		})
+	)
 
 interface Module {
 	//
@@ -174,30 +251,6 @@ export interface Program {
 	customTypes: CustomType[]
 	objects: Object[]
 	modules: Module[]
-}
-
-function untilEndOfInput<T>(parser: Parser<T, string, any>) {
-	return contextual<T[]>(function* (): CustomGenerator<
-		Parser<T, string, any>,
-		T[],
-		any
-	> {
-		const result: T[] = []
-		while (true) {
-			const isEndOfInput: "no" | null = yield lookAhead(
-				endOfInput
-			).errorChain(() => succeedWith("no")) as Parser<T, string, any>
-
-			if (isEndOfInput === null) {
-				break
-			}
-
-			const value: T = yield parser
-			result.push(value)
-		}
-
-		return result
-	})
 }
 
 const newLine = char("\n").map(
@@ -228,39 +281,39 @@ export function getProgrammParser() {
 	})
 
 	const typeParser: Parser<TopLevelType, string, any> =
-		contextual<CustomType>(function* (): CustomGenerator<
-			Parser<any, string, any>,
-			CustomType,
-			any
-		> {
-			yield str("type")
+		lookAheadSequenceIgnore(
+			str("type"),
+			contextual<CustomType>(function* (): CustomGenerator<
+				Parser<any, string, any>,
+				CustomType,
+				any
+			> {
+				yield str("type")
 
-			yield whitespace
+				yield whitespace
 
-			const name: CustomNameType = yield customTypeName
+				const name: CustomNameType = yield customTypeName
 
-			yield optionalWhitespace
+				yield optionalWhitespace
 
-			yield char("=")
+				yield char("=")
 
-			yield optionalWhitespace
+				yield optionalWhitespace
 
-			const content: TopLevelType = yield choice([
-				sequenceOf([
-					lookAhead(regex(/^[a-z]{1}/)),
+				const content: TopLevelType = yield choice([
 					getInternalTypeParser(),
-				]).map(([_, type]) => type),
-				customTypeName,
-			])
+					customTypeName,
+				])
 
-			yield optionalWhitespace
-			yield newLine
+				yield optionalWhitespace
+				yield newLine
 
-			return {
-				name: name.name,
-				content,
-			}
-		}).map(({ name, content }): TopLevelType => {
+				return {
+					name: name.name,
+					content,
+				}
+			})
+		).map(({ name, content }): TopLevelType => {
 			return {
 				type: "customType",
 				name,
@@ -276,9 +329,7 @@ export function getProgrammParser() {
 
 	const topLevelParser: Parser<TopLevelType, string, any> = choice([
 		commentParser,
-		sequenceOf([lookAhead(str("type")), typeParser]).map(
-			([_, type]) => type
-		),
+		typeParser,
 		emptyLineParser,
 		/* objectParser,
 		moduleParser, */

@@ -10,3 +10,11 @@ type                    OO = boolean
 type U = float
    -- s s 
 type S =  string   
+
+
+type Literal = "hello, World"
+
+type EscapedLiteral = "\" \\ \n \r \t"
+
+
+type Test = optional<null>

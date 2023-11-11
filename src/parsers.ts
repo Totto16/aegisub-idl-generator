@@ -1,9 +1,11 @@
 import {
 	Parser,
 	char,
+	endOfInput,
 	lookAhead,
 	possibly,
 	regex,
+	sequenceOf,
 	succeedWith,
 } from "arcsecond"
 
@@ -89,3 +91,45 @@ export const whitespace = contextual(function* (): CustomGenerator<
 export const optionalWhitespace: Parser<string | null> = possibly(
 	whitespace
 ).map((x) => x || "")
+
+export function untilParser<T, Y>(
+	parser: Parser<T, string, any>,
+	until: Parser<Y, string, any>
+) {
+	return contextual<T[]>(function* (): CustomGenerator<
+		Parser<T, string, any>,
+		T[],
+		any
+	> {
+		const result: T[] = []
+		while (true) {
+			const isEndReached: "no" | Y = yield lookAhead(until).errorChain(
+				() => succeedWith("no")
+			) as Parser<T, string, any>
+
+			if (isEndReached !== "no") {
+				break
+			}
+
+			const value: T = yield parser
+			result.push(value)
+		}
+
+		return result
+	})
+}
+
+export function untilEndOfInput<T>(
+	parser: Parser<T, string, any>
+): Parser<T[], string, any> {
+	return untilParser<T, null>(parser, endOfInput)
+}
+
+export function lookAheadSequenceIgnore<T>(
+	lookAheadParser: Parser<any, string, any>,
+	parser: Parser<T, string, any>
+): Parser<T, string, any> {
+	return sequenceOf([lookAhead(lookAheadParser), parser]).map(
+		([_, original]) => original
+	)
+}
