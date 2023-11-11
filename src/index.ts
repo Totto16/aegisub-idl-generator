@@ -1,7 +1,8 @@
-import fs from "fs"
+import { readFile, writeFile, access } from "fs/promises"
 import { programmParser } from "./parser"
 import { printError } from "./helpers"
 import { Command, CommandOptions, program } from "commander"
+import { constants } from "fs"
 const packageInfo = require("../package.json")
 
 interface TSCommand {
@@ -68,31 +69,56 @@ async function getOptions(): Promise<Options> {
 	})
 }
 
+function replaceExtension(path: string, newExtension: string) {
+	const splitFile: string[] = path.split(".")
+
+	splitFile.splice(-1)
+
+	splitFile.push(newExtension)
+
+	return splitFile.join(".")
+}
+
 async function main() {
 	const options = await getOptions()
 
-	const file = options.file
+	const fileName = options.file
 
-	if (!fs.existsSync(file)) {
-		console.error(`File '${file}' doesn't exist!`)
+	if (!access(fileName, constants.R_OK)) {
+		console.error(`File '${fileName}' doesn't exist!`)
 		process.exit(1)
 	}
 
-	const fileData = fs.readFileSync(file).toString()
+	const fileData = (await readFile(fileName)).toString()
 
 	// parse
 	const parsed = programmParser.run(fileData)
 
 	if (parsed.isError) {
-		printError(file, parsed, fileData)
+		printError(fileName, parsed, fileData)
 		process.exit(2)
 	}
 
-	console.log(`Successfully parsed '${file}' file.`)
+	console.log(`Successfully parsed '${fileName}' file.`)
+
+	const program = parsed.result
 
 	// typecheck
 
 	// generate
+
+	if (options.command.type === "cpp") {
+		const output = options.command.output ?? replaceExtension(fileName, "h")
+
+		await writeFile(output, "// TODO cpp")
+	} else if (options.command.type === "ts") {
+		const output =
+			options.command.output ?? replaceExtension(fileName, "d.ts")
+
+		await writeFile(output, "// TODO ts")
+	} else {
+		throw new Error("UNREACHABLE")
+	}
 }
 
 main()
