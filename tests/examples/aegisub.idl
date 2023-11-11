@@ -14,7 +14,7 @@ object ScriptPropertiesOption2 {
     version: OptionalString;
 }
 
-type ScriptProperties  =  union<ScriptPropertiesOption1, arguments<ScriptPropertiesOption2>>; 
+type ScriptProperties = union<ScriptPropertiesOption1, arguments<ScriptPropertiesOption2>>; 
 
 -- module [az] {values}
 

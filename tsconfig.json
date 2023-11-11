@@ -5,7 +5,7 @@
 		"target": "es2022",
 		"module": "CommonJS",
 		"moduleResolution": "node",
-		"lib": ["es2021"],
+		"lib": ["es2021", "dom"],
 		"rootDir": "src/",
 		"outDir": "build",
 		"strict": true,
