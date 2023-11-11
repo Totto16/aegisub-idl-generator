@@ -8,10 +8,10 @@ type OptionalString = optional<union<string, null, undefined>>;
 type ScriptPropertiesOption1 = arguments<string, OptionalString, OptionalString, OptionalString>
 
 object ScriptPropertiesOption2 {
-    name: string;
-    description: OptionalString;
-    author: OptionalString;
-    version: OptionalString;
+    name: string
+    description: OptionalString
+    author: OptionalString
+    version: OptionalString
 }
 
 type ScriptProperties = union<ScriptPropertiesOption1, arguments<ScriptPropertiesOption2>>; 
@@ -22,6 +22,6 @@ type ScriptProperties = union<ScriptPropertiesOption1, arguments<ScriptPropertie
 -- or custom with UpperCase start 
 
 module aegisub {
-    version: string;
-    set_script_properties: function<ScriptProperties, void>;
+    version: string
+    set_script_properties: function<ScriptProperties, void>
 }

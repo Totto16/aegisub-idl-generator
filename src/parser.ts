@@ -4,15 +4,10 @@ import {
 	char,
 	sepBy,
 	regex,
-	optionalWhitespace,
 	str,
 	possibly,
 	succeedWith,
-	letters,
-	digits,
 	sequenceOf,
-	whitespace,
-	many,
 	endOfInput,
 	lookAhead,
 } from "arcsecond"
@@ -234,10 +229,54 @@ function untilEndOfInput<T>(parser: Parser<T, string, any>) {
 	})
 }
 
-export function getProgrammParser() {
-	const commentParser = regex(/^(\s)*--(.*)(\s)*/).map((d): TopLevelType => {
-		return { type: "comment", content: d }
+const whitespace = contextual(function* (): CustomGenerator<
+	Parser<string, string, any>,
+	string,
+	any
+> {
+	const result: string[] = []
+
+	const whiteSpaceRegex = regex(/^\s{1}/)
+	while (true) {
+		const isNewline: "no" | "\n" = yield lookAhead(char("\n")).errorChain(
+			() => succeedWith("no")
+		)
+
+		if (isNewline !== "no") {
+			break
+		}
+
+		const isWhiteSpace: "no" | string = yield lookAhead(
+			whiteSpaceRegex
+		).errorChain(() => succeedWith("no"))
+
+		if (isWhiteSpace === "no") {
+			break
+		}
+
+		const value: string = yield whiteSpaceRegex
+		result.push(value)
+	}
+
+	return result.join("")
+})
+
+const optionalWhitespace: Parser<string | null> = possibly(whitespace).map(
+	(x) => x || ""
+)
+
+const newLine = char("\n").map(
+	(): TopLevelType => ({
+		type: "newLine",
 	})
+)
+
+export function getProgrammParser() {
+	const commentParser = regex(/^(\s)*--(.*)(\s)*/).map(
+		(content): TopLevelType => {
+			return { type: "comment", content }
+		}
+	)
 
 	const typeParser: Parser<TopLevelType, string, any> = contextual<Type>(
 		function* (): CustomGenerator<Parser<any, string, any>, Type, string> {
@@ -261,36 +300,33 @@ export function getProgrammParser() {
 				customTypeName,
 			])) as AllInternalTypes | CustomType
 
+			yield optionalWhitespace
+			yield newLine
+
 			return {
 				name,
 				resolvedValue,
 			}
 		}
-	).map((a): TopLevelType => {
+	).map((content): TopLevelType => {
 		return {
 			type: "customType",
-			content: a,
+			content,
 		}
 	})
 
-	const emptyLineParser = regex(/^\s*$/).map(
+	const emptyLineParser = sequenceOf([optionalWhitespace, newLine]).map(
 		(): TopLevelType => ({
 			type: "emptyLine",
 		})
 	)
-	const newLine = char("\n").map(
-		(): TopLevelType => ({
-			type: "newLine",
-		})
-	)
 
 	const topLevelParser: Parser<TopLevelType, string, any> = choice([
-		emptyLineParser,
 		commentParser,
 		sequenceOf([lookAhead(str("type")), typeParser]).map(
 			([_, type]) => type
 		),
-		newLine,
+		emptyLineParser,
 		/* objectParser,
 		moduleParser, */
 	])
