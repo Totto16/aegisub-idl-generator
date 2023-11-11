@@ -6,7 +6,8 @@
     "description": "A generator from aegisub custom idl (interface Description Language) into C++ and Typescript type declarations",
     "scripts": {
         "build": "tsc",
-        "test": "npx jest"
+        "test": "npx jest",
+        "execute": "node . "
     },
     "repository": {
         "type": "git",
@@ -24,6 +25,7 @@
         "typescript": "^5.2.2"
     },
     "dependencies": {
-        "arcsecond": "^5.0.0"
+        "arcsecond": "^5.0.0",
+        "commander": "^11.1.0"
     }
 }
