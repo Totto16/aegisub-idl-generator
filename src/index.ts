@@ -29,7 +29,7 @@ async function main() {
 		process.exit(1)
 	}
 
-	console.log(parsed.result)
+	console.log(JSON.stringify(parsed.result, undefined, 4))
 
 	// typecheck
 
