@@ -1,5 +1,5 @@
 import fs from "fs"
-import { getProgrammParser } from "./parser"
+import { programmParser } from "./parser"
 import { printError } from "./helpers"
 
 async function main() {
@@ -20,8 +20,6 @@ async function main() {
 	const fileData = fs.readFileSync(file).toString()
 
 	// parse
-	const programmParser = getProgrammParser()
-
 	const parsed = programmParser.run(fileData)
 
 	if (parsed.isError) {
