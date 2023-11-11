@@ -8,3 +8,5 @@ type ZZZ = int
 type                    OO = boolean
 
 type U = float
+   -- s s 
+type S =  string

@@ -12,6 +12,9 @@ import {
 	digits,
 	sequenceOf,
 	whitespace,
+	many,
+	endOfInput,
+	lookAhead,
 } from "arcsecond"
 
 // only changed the type, so that next has to pass the value, no undefined allowed!
@@ -26,15 +29,15 @@ interface CustomGenerator<T = unknown, TReturn = any, TNext = unknown>
 const contextual = <RType = any>(
 	generatorFn: () => CustomGenerator<
 		Parser<any, string, string>,
-		string | RType,
+		RType,
 		string | undefined
 	>
-) => {
+): Parser<RType, string, any> => {
 	return succeedWith<string, string, string>("").chain(
-		(a: string | undefined): Parser<string, string, string> => {
+		(a: string | undefined): Parser<RType, string, string> => {
 			const iterator: CustomGenerator<
 				Parser<any, string, string>,
-				string | RType,
+				RType,
 				string
 			> = generatorFn()
 
@@ -130,7 +133,12 @@ export interface Type {
 	resolvedValue: AllInternalTypes | CustomType
 }
 
-const customTypeName = regex(/^[A-Z]{1}[a-zA-Z0-9]*/)
+const customTypeName = regex(/^[A-Z]{1}[a-zA-Z0-9]*/).errorMap((err) => {
+	return err.error.replace(
+		"matching '/^[A-Z]{1}[a-zA-Z0-9]*/'",
+		"to be a custom type name (starts with"
+	)
+})
 
 const arrayParser: Parser<ArrayType | string, string, any> = contextual(
 	function* (): CustomGenerator<Parser<any, string, any>, ArrayType, string> {
@@ -168,10 +176,70 @@ function getInternalTypeParser() {
 	return internalTypeParser
 }
 
-export function getProgrammParser() {
-	const commentParser = regex(/^\s*--(.*)\s*$/)
+interface Module {
+	//
+}
 
-	const typeParser: Parser<Type | string, string, any> = contextual(
+interface Object {
+	//
+}
+
+export interface Program {
+	customTypes: Type[]
+	objects: Object[]
+	modules: Module[]
+}
+
+interface NewLineType {
+	type: "newLine"
+}
+
+interface EmptyLineType {
+	type: "emptyLine"
+}
+
+interface CommentType {
+	type: "comment"
+	content: string
+}
+
+interface CustomTypeType {
+	type: "customType"
+	content: Type
+}
+
+type TopLevelType = NewLineType | EmptyLineType | CommentType | CustomTypeType
+
+function untilEndOfInput<T>(parser: Parser<T, string, any>) {
+	return contextual<T[]>(function* (): CustomGenerator<
+		Parser<T, string, any>,
+		T[],
+		any
+	> {
+		const result: T[] = []
+		while (true) {
+			const isEndOfInput: "no" | null = yield lookAhead(
+				endOfInput
+			).errorChain(() => succeedWith("no")) as Parser<T, string, any>
+
+			if (isEndOfInput === null) {
+				break
+			}
+
+			const value: T = yield parser
+			result.push(value)
+		}
+
+		return result
+	})
+}
+
+export function getProgrammParser() {
+	const commentParser = regex(/^(\s)*--(.*)(\s)*/).map((d): TopLevelType => {
+		return { type: "comment", content: d }
+	})
+
+	const typeParser: Parser<TopLevelType, string, any> = contextual<Type>(
 		function* (): CustomGenerator<Parser<any, string, any>, Type, string> {
 			yield str("type")
 
@@ -186,8 +254,11 @@ export function getProgrammParser() {
 			yield optionalWhitespace
 
 			const resolvedValue = (yield choice([
+				sequenceOf([
+					lookAhead(regex(/^[a-z]{1}/)),
+					getInternalTypeParser(),
+				]).map(([_, type]) => type),
 				customTypeName,
-				getInternalTypeParser(),
 			])) as AllInternalTypes | CustomType
 
 			return {
@@ -195,19 +266,59 @@ export function getProgrammParser() {
 				resolvedValue,
 			}
 		}
+	).map((a): TopLevelType => {
+		return {
+			type: "customType",
+			content: a,
+		}
+	})
+
+	const emptyLineParser = regex(/^\s*$/).map(
+		(): TopLevelType => ({
+			type: "emptyLine",
+		})
+	)
+	const newLine = char("\n").map(
+		(): TopLevelType => ({
+			type: "newLine",
+		})
 	)
 
-	const objectParser = char("!")
-
-	const moduleParser = char("?")
-
-	const topLevelParser = choice([
+	const topLevelParser: Parser<TopLevelType, string, any> = choice([
+		emptyLineParser,
 		commentParser,
-		typeParser,
-		objectParser,
-		moduleParser,
+		sequenceOf([lookAhead(str("type")), typeParser]).map(
+			([_, type]) => type
+		),
+		newLine,
+		/* objectParser,
+		moduleParser, */
 	])
 
-	const finalParser = sepBy(char("\n"))(topLevelParser)
+	const finalParser = untilEndOfInput(topLevelParser).map(
+		(dataArray: TopLevelType[]): Program => {
+			//console.log(dataArray)
+			const customTypes: Type[] = []
+			const modules: Module[] = []
+			const objects: Object[] = []
+			for (const data of dataArray) {
+				switch (data.type) {
+					case "customType":
+						customTypes.push(data.content)
+						break
+
+					default:
+						break
+				}
+			}
+
+			return {
+				customTypes,
+				modules,
+				objects,
+			}
+		}
+	)
+
 	return finalParser
 }
