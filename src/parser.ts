@@ -54,9 +54,12 @@ interface OptionalType<T extends boolean = true> {
 	content: InternalTypeTemplate<T>
 }
 
-interface UnionType<T extends boolean = true> {
+export interface UnionType<
+	T extends boolean = true,
+	TT extends InternalTypeTemplate<T> = InternalTypeTemplate<T>
+> {
 	type: "union"
-	types: InternalTypeTemplate<T>[]
+	types: TT[]
 }
 
 export interface ArgumentsType<T extends boolean = true> {
@@ -66,7 +69,10 @@ export interface ArgumentsType<T extends boolean = true> {
 
 interface FunctionType<T extends boolean = true> {
 	type: "function"
-	arguments: ArgumentsType<T> | (T extends true ? CustomNameType : never)
+	arguments:
+		| ArgumentsType<T>
+		| (T extends true ? CustomNameType : never)
+		| UnionType<T, ArgumentsType<T>>
 	return: InternalTypeTemplate<T>
 }
 
@@ -124,7 +130,7 @@ const stringLiteralParser: Parser<InternalType, string, EmptyObject> =
 				const isPotentialEnd: "no" | '"' | string = yield lookAhead(
 					char('"')
 				).errorChain(() => succeedWith("no"))
-				
+
 				if (isPotentialEnd === "no") {
 					result.push(yield anyChar)
 				} else {
@@ -551,6 +557,8 @@ const topLevelParser: Parser<TopLevelResult, string, EmptyObject> = choice([
 	objectParser,
 	moduleParser,
 ])
+
+//TODO: store in teh data the source line for each token, so that we can produce better errors later in the typecheck phase
 
 export const programmParser: Parser<Program, string, EmptyObject> =
 	untilEndOfInput(topLevelParser).map(

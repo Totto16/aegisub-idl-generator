@@ -6,7 +6,14 @@ import {
 	InternalTypeWithoutCustomNames,
 	Program,
 	Property,
+	UnionType,
 } from "./parser"
+
+//TODO: later to pretty print we have take a location or multiple
+function typeChecKError(message: string): never {
+	console.error(message)
+	process.exit(3)
+}
 
 function getType<T extends boolean>(
 	program: Program<T>,
@@ -30,10 +37,9 @@ function resolveType(
 		arg: CustomNameType
 	): InternalTypeWithoutCustomNames => {
 		if (alreadyTrying !== false && alreadyTrying.includes(arg.name)) {
-			console.error(
+			typeChecKError(
 				`Circular type dependency detected on custom type '${arg.name}'`
 			)
-			process.exit(3)
 		}
 
 		const memberType = getType(program, arg.name)
@@ -47,10 +53,9 @@ function resolveType(
 			)
 		} else {
 			if (alreadyTrying === false) {
-				console.error(
+				typeChecKError(
 					`Trying to resolve a custom type, after all were resolved: type '${arg.name}' could not be resolved!`
 				)
-				process.exit(3)
 			}
 
 			// TODO: we never store the now resolved type!
@@ -89,27 +94,44 @@ function resolveType(
 			}
 
 		case "function": {
-			let resolvedArguments: ArgumentsType<false>
+			let temp: InternalTypeWithoutCustomNames
 
 			if (type.arguments.type === "customTypeName") {
-				const temp = resolveCustomType(type.arguments)
-
-				if (temp.type !== "arguments") {
-					console.error(
-						`The custom type '${type.arguments.name}' has to resolve to an 'arguments' type, but resolved to '${temp.type}' !`
-					)
-					process.exit(3)
-				}
-				resolvedArguments = temp
+				temp = resolveCustomType(type.arguments)
 			} else {
-				const temp = resolveType(program, type.arguments, alreadyTrying)
+				temp = resolveType(program, type.arguments, alreadyTrying)
+			}
 
-				if (temp.type !== "arguments") {
-					throw new Error(
-						`Implementation Error, a type 'arguments' should always be resolved to 'arguments' but resolved to '${temp.type}'`
+			let resolvedArguments:
+				| ArgumentsType<false>
+				| UnionType<false, ArgumentsType<false>>
+
+			if (temp.type === "arguments") {
+				resolvedArguments = temp
+			} else if (temp.type === "union") {
+				const unionTypes = temp.types.map(({ type }) => type)
+
+				const uniqueUnionTypes = getUnique(unionTypes)
+				if (
+					uniqueUnionTypes.length === 1 &&
+					uniqueUnionTypes[0] === "arguments"
+				) {
+					//TYpescript isn't that smart, since that's really complicated xD
+					resolvedArguments = temp as UnionType<
+						false,
+						ArgumentsType<false>
+					>
+				} else {
+					typeChecKError(
+						`Function type error: function arguments can only have type 'union<...arguments>' or 'but have type 'union<${unionTypes.join(
+							", "
+						)}>'`
 					)
 				}
-				resolvedArguments = temp
+			} else {
+				typeChecKError(
+					`Function type error: function arguments can only have type 'arguments' or 'union<...arguments>' but have type '${temp.type}'`
+				)
 			}
 
 			return {
@@ -174,8 +196,7 @@ export function typeCheck(program: Program): Program<false> {
 	const typeNames = program.types.map(({ name }) => name)
 
 	if (hasDuplicates(typeNames)) {
-		console.error("The type names have duplicates, that is not allowed!")
-		process.exit(3)
+		typeChecKError("The type names have duplicates, that is not allowed!")
 	}
 
 	// resolve custom Types in custom Types
@@ -197,14 +218,12 @@ export function typeCheck(program: Program): Program<false> {
 		)
 		if (newType.type !== "object") {
 			throw new Error(
-				`Implementation Error, a type 'object' should always be resolved to 'arguments' but resolved to '${newType.type}'`
+				`Implementation Error, a type 'object' should always be resolved to 'object' but resolved to '${newType.type}'`
 			)
 		}
 
 		newProgram.modules.push({ type, name, properties: newType.properties })
 	}
-
-	//TODO resolve modules
 
 	//TODO checks these things:
 	// each function can only have type arguments or union<...arguments>
