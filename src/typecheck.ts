@@ -24,12 +24,12 @@ function getType<T extends boolean>(
 function resolveType(
 	program: Program,
 	type: InternalType,
-	alreadyTrying: string[]
+	alreadyTrying: string[] | false
 ): InternalTypeWithoutCustomNames {
 	const resolveCustomType = (
 		arg: CustomNameType
 	): InternalTypeWithoutCustomNames => {
-		if (alreadyTrying.includes(arg.name)) {
+		if (alreadyTrying !== false && alreadyTrying.includes(arg.name)) {
 			console.error(
 				`Circular type dependency detected on custom type '${arg.name}'`
 			)
@@ -40,11 +40,19 @@ function resolveType(
 
 		if (memberType !== null) {
 			// TODO: we maybe don't store the resolved type, since it may be unresolved in the program, but might be already  resolved...
-			return resolveType(program, memberType, [
-				...alreadyTrying,
-				arg.name,
-			])
+			return resolveType(
+				program,
+				memberType,
+				alreadyTrying === false ? false : [...alreadyTrying, arg.name]
+			)
 		} else {
+			if (alreadyTrying === false) {
+				console.error(
+					`Trying to resolve a custom type, after all were resolved: type '${arg.name}' could not be resolved!`
+				)
+				process.exit(3)
+			}
+
 			// TODO: we never store the now resolved type!
 			return resolveType(program, arg, [...alreadyTrying, arg.name])
 		}
@@ -178,6 +186,22 @@ export function typeCheck(program: Program): Program<false> {
 			[name]
 		)
 		newProgram.types.push({ type, name, content: newType, origin })
+	}
+
+	// resolve custom Types in modules
+	for (const { name, type, properties } of program.modules) {
+		const newType = resolveType(
+			mergePrograms(program, newProgram, true),
+			{ type: "object", properties }, // do a little trick with 'object' type!
+			false
+		)
+		if (newType.type !== "object") {
+			throw new Error(
+				`Implementation Error, a type 'object' should always be resolved to 'arguments' but resolved to '${newType.type}'`
+			)
+		}
+
+		newProgram.modules.push({ type, name, properties: newType.properties })
 	}
 
 	//TODO resolve modules
