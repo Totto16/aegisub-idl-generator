@@ -3,6 +3,7 @@ import { programmParser } from "./parser"
 import { printError } from "./helpers"
 import { Command, CommandOptions, program } from "commander"
 import { constants } from "fs"
+import { typeCheck } from "./typecheck"
 const packageInfo = require("../package.json")
 
 interface TSCommand {
@@ -104,6 +105,7 @@ async function main() {
 	const program = parsed.result
 
 	// typecheck
+	const resolvedProgram = typeCheck(program)
 
 	// generate
 

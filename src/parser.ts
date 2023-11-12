@@ -21,29 +21,31 @@ import {
 	whitespace,
 } from "./parsers"
 
-interface ArrayType {
+interface ArrayType<T extends boolean = true> {
 	type: "array"
-	types: InternalType[]
+	types: InternalTypeTemplate<T>[]
 }
 
-interface OptionalType {
+interface OptionalType<T extends boolean = true> {
 	type: "optional"
-	content: InternalType
+	content: InternalTypeTemplate<T>
 }
 
-interface UnionType {
+interface UnionType<T extends boolean = true> {
 	type: "union"
-	types: InternalType[]
+	types: InternalTypeTemplate<T>[]
 }
 
-interface ArgumentsType {
+interface ArgumentsType<T extends boolean = true> {
 	type: "arguments"
-	types: InternalType[]
+	types: InternalTypeTemplate<T>[]
 }
 
-interface FunctionType {
+interface FunctionType<T extends boolean = true> {
 	type: "function"
-	arguments: ArgumentsType | CustomNameType
+	arguments: T extends true
+		? ArgumentsType<T> | CustomNameType
+		: ArgumentsType<T>
 	return: InternalType
 }
 
@@ -72,15 +74,18 @@ interface CustomNameType {
 	name: string
 }
 
-type InternalType =
-	| ArrayType
+type InternalTypeTemplate<T extends boolean> =
+	| ArrayType<T>
 	| LiteralType
 	| StringLiteralType
-	| CustomNameType
-	| OptionalType
-	| UnionType
-	| ArgumentsType
-	| FunctionType
+	| OptionalType<T>
+	| UnionType<T>
+	| ArgumentsType<T>
+	| (T extends true ? FunctionType<T> | CustomNameType : FunctionType<T>)
+
+export type InternalType = InternalTypeTemplate<true>
+
+export type InternalTypeWithoutCustomNames = InternalTypeTemplate<false>
 
 const customTypeNameParser = lookAheadSequenceIgnore(
 	regex(/^[A-Z]{1}/),
@@ -307,9 +312,9 @@ const functionParser: Parser<InternalType, string, any> =
 
 const newLine = char("\n")
 
-interface Property {
+interface Property<T extends boolean = true> {
 	name: string
-	type: InternalType
+	type: InternalTypeTemplate<T>
 }
 
 const identifierParser = regex(/^[a-z]{1}[a-zA-Z0-9_-]*/)
@@ -354,30 +359,30 @@ interface Comment {
 	content: string
 }
 
-interface Type {
+interface Type<T extends boolean = true> {
 	type: "type"
 	name: string
-	content: InternalType
+	content: InternalTypeTemplate<T>
 }
 
-interface Object {
+interface Object<T extends boolean = true> {
 	type: "object"
 	name: string
-	properties: Property[]
+	properties: Property<T>[]
 }
 
-interface Module {
+interface Module<T extends boolean = true> {
 	type: "module"
 	name: string
-	properties: Property[]
+	properties: Property<T>[]
 }
 
 type TopLevelResult = EmptyLine | Comment | Type | Object | Module
 
-export interface Program {
-	types: Type[]
-	objects: Object[]
-	modules: Module[]
+export interface Program<T extends boolean = true> {
+	types: Type<T>[]
+	objects: Object<T>[]
+	modules: Module<T>[]
 }
 
 const emptyLineParser = sequenceOf([optionalWhitespace, newLine]).map(
