@@ -21,6 +21,8 @@ import {
 	whitespace,
 } from "./parsers"
 
+type EmptyObject = Record<string, never>
+
 interface ArrayType<T extends boolean = true> {
 	type: "array"
 	types: InternalTypeTemplate<T>[]
@@ -87,19 +89,20 @@ export type InternalType = InternalTypeTemplate<true>
 
 export type InternalTypeWithoutCustomNames = InternalTypeTemplate<false>
 
-const customTypeNameParser = lookAheadSequenceIgnore(
-	regex(/^[A-Z]{1}/),
-	regex(/^[A-Z]{1}[a-zA-Z0-9_-]*/)
-		.errorMap((err) => {
-			return err.error.replace(
-				"matching '/^[A-Z]{1}[a-zA-Z0-9]*/'",
-				"to be a custom type name (starts with"
-			)
-		})
-		.map((name): InternalType => ({ type: "customTypeName", name }))
-)
+const customTypeNameParser: Parser<InternalType, string, EmptyObject> =
+	lookAheadSequenceIgnore(
+		regex(/^[A-Z]{1}/),
+		regex(/^[A-Z]{1}[a-zA-Z0-9_-]*/)
+			.errorMap((err) => {
+				return err.error.replace(
+					"matching '/^[A-Z]{1}[a-zA-Z0-9]*/'",
+					"to be a custom type name (starts with"
+				)
+			})
+			.map((name): InternalType => ({ type: "customTypeName", name }))
+	)
 
-const stringLiteralParser: Parser<InternalType, string, any> =
+const stringLiteralParser: Parser<InternalType, string, EmptyObject> =
 	lookAheadSequenceIgnore(
 		char('"'),
 		contextual(function* (): CustomGenerator<
@@ -139,77 +142,78 @@ const stringLiteralParser: Parser<InternalType, string, any> =
 	)
 const literalParser = (
 	name: LiteralKeys
-): Parser<InternalType, string, any> => {
+): Parser<InternalType, string, EmptyObject> => {
 	return lookAheadSequenceIgnore(
 		regex(/^[a-z]{1}/),
 		str(name).map((): InternalType => ({ type: name }))
 	)
 }
 
-const internalTypeParser = recursiveParser(
-	(): Parser<InternalType, string, any> =>
-		choice([
-			literalParser("string"),
-			literalParser("void"),
-			literalParser("int"),
-			literalParser("float"),
-			literalParser("number"),
-			literalParser("boolean"),
-			literalParser("null"),
-			literalParser("undefined"),
-			literalParser("false"),
-			literalParser("true"),
-			customTypeNameParser,
-			stringLiteralParser,
-			arrayParser,
-			optionalParser,
-			unionParser,
-			argumentsParser,
-			functionParser,
-		])
-)
+const internalTypeParser: Parser<InternalType, string, EmptyObject> =
+	recursiveParser(
+		(): Parser<InternalType, string, EmptyObject> =>
+			choice([
+				literalParser("string"),
+				literalParser("void"),
+				literalParser("int"),
+				literalParser("float"),
+				literalParser("number"),
+				literalParser("boolean"),
+				literalParser("null"),
+				literalParser("undefined"),
+				literalParser("false"),
+				literalParser("true"),
+				customTypeNameParser,
+				stringLiteralParser,
+				arrayParser,
+				optionalParser,
+				unionParser,
+				argumentsParser,
+				functionParser,
+			])
+	)
 
-const arrayParser: Parser<InternalType, string, any> = lookAheadSequenceIgnore(
-	str("array"),
-	contextual(function* (): CustomGenerator<
-		Parser<any, string, any>,
-		InternalType,
-		string
-	> {
-		yield str("array")
-		yield char("<")
+const arrayParser: Parser<InternalType, string, EmptyObject> =
+	lookAheadSequenceIgnore(
+		str("array"),
+		contextual(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			InternalType,
+			any
+		> {
+			yield str("array")
+			yield char("<")
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		const types = (yield sepBy(sequenceOf([char(","), optionalWhitespace]))(
-			internalTypeParser
-		)) as unknown as InternalType[]
+			const types: InternalType[] = yield sepBy(
+				sequenceOf([char(","), optionalWhitespace])
+			)(internalTypeParser)
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		yield char(">")
-		return {
-			type: "array",
-			types,
-		}
-	})
-)
+			yield char(">")
+			return {
+				type: "array",
+				types,
+			}
+		})
+	)
 
-const optionalParser: Parser<InternalType, string, any> =
+const optionalParser: Parser<InternalType, string, EmptyObject> =
 	lookAheadSequenceIgnore(
 		str("optional"),
 		contextual(function* (): CustomGenerator<
 			Parser<any, string, any>,
 			InternalType,
-			string
+			any
 		> {
 			yield str("optional")
 			yield char("<")
 
 			yield optionalWhitespace
 
-			const content =
-				(yield internalTypeParser) as unknown as InternalType
+			const content: InternalType = yield internalTypeParser
 
 			yield optionalWhitespace
 
@@ -221,48 +225,49 @@ const optionalParser: Parser<InternalType, string, any> =
 		})
 	)
 
-const unionParser: Parser<InternalType, string, any> = lookAheadSequenceIgnore(
-	str("union"),
-	contextual(function* (): CustomGenerator<
-		Parser<any, string, any>,
-		InternalType,
-		string
-	> {
-		yield str("union")
-		yield char("<")
+const unionParser: Parser<InternalType, string, EmptyObject> =
+	lookAheadSequenceIgnore(
+		str("union"),
+		contextual(function* (): CustomGenerator<
+			Parser<any, string, string>,
+			InternalType,
+			any
+		> {
+			yield str("union")
+			yield char("<")
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		const types = (yield sepBy(sequenceOf([char(","), optionalWhitespace]))(
-			internalTypeParser
-		)) as unknown as InternalType[]
+			const types: InternalType[] = yield sepBy(
+				sequenceOf([char(","), optionalWhitespace])
+			)(internalTypeParser)
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		yield char(">")
-		return {
-			type: "union",
-			types,
-		}
-	})
-)
+			yield char(">")
+			return {
+				type: "union",
+				types,
+			}
+		})
+	)
 
-const argumentsParser: Parser<InternalType, string, any> =
+const argumentsParser: Parser<InternalType, string, EmptyObject> =
 	lookAheadSequenceIgnore(
 		str("arguments"),
 		contextual(function* (): CustomGenerator<
 			Parser<any, string, any>,
 			InternalType,
-			string
+			any
 		> {
 			yield str("arguments")
 			yield char("<")
 
 			yield optionalWhitespace
 
-			const types = (yield sepBy(
+			const types: InternalType[] = yield sepBy(
 				sequenceOf([char(","), optionalWhitespace])
-			)(internalTypeParser)) as unknown as InternalType[]
+			)(internalTypeParser)
 
 			yield optionalWhitespace
 
@@ -274,30 +279,27 @@ const argumentsParser: Parser<InternalType, string, any> =
 		})
 	)
 
-const functionParser: Parser<InternalType, string, any> =
+const functionParser: Parser<InternalType, string, EmptyObject> =
 	lookAheadSequenceIgnore(
 		str("function"),
 		contextual(function* (): CustomGenerator<
 			Parser<any, string, any>,
 			InternalType,
-			string
+			any
 		> {
 			yield str("function")
 			yield char("<")
 
 			yield optionalWhitespace
 
-			const argumentsContent = (yield choice([
-				argumentsParser,
-				customTypeNameParser,
-			])) as unknown as ArgumentsType | CustomNameType
+			const argumentsContent: ArgumentsType | CustomNameType =
+				yield choice([argumentsParser, customTypeNameParser])
 
 			yield optionalWhitespace
 			yield char(",")
 			yield optionalWhitespace
 
-			const returnContent =
-				(yield internalTypeParser) as unknown as InternalType
+			const returnContent: InternalType = yield internalTypeParser
 
 			yield optionalWhitespace
 
@@ -310,7 +312,7 @@ const functionParser: Parser<InternalType, string, any> =
 		})
 	)
 
-const newLine = char("\n")
+const newLine: Parser<string, string, EmptyObject> = char("\n")
 
 interface Property<T extends boolean = true> {
 	name: string
@@ -319,34 +321,35 @@ interface Property<T extends boolean = true> {
 
 const identifierParser = regex(/^[a-z]{1}[a-zA-Z0-9_-]*/)
 
-const propertyParser: Parser<Property, string, any> = lookAheadSequenceIgnore(
-	sequenceOf([optionalWhitespace, identifierParser]),
-	contextual<Property>(function* (): CustomGenerator<
-		Parser<any, string, any>,
-		Property,
-		any
-	> {
-		yield optionalWhitespace
+const propertyParser: Parser<Property, string, EmptyObject> =
+	lookAheadSequenceIgnore(
+		sequenceOf([optionalWhitespace, identifierParser]),
+		contextual<Property>(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			Property,
+			any
+		> {
+			yield optionalWhitespace
 
-		const name: string = yield identifierParser
+			const name: string = yield identifierParser
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		yield char(":")
+			yield char(":")
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		const type = (yield internalTypeParser) as unknown as InternalType
+			const type: InternalType = yield internalTypeParser
 
-		yield optionalWhitespace
-		yield newLine
+			yield optionalWhitespace
+			yield newLine
 
-		return {
-			name: name,
-			type,
-		}
-	})
-)
+			return {
+				name: name,
+				type,
+			}
+		})
+	)
 
 // TOP level parsers
 
@@ -385,33 +388,33 @@ export interface Program<T extends boolean = true> {
 	modules: Module<T>[]
 }
 
-const emptyLineParser = sequenceOf([optionalWhitespace, newLine]).map(
+const emptyLineParser: Parser<TopLevelResult, string, EmptyObject> = sequenceOf(
+	[optionalWhitespace, newLine]
+).map(
 	(): TopLevelResult => ({
 		type: "emptyLine",
 	})
 )
 
-const commentParser = contextual(function* (): CustomGenerator<
-	Parser<any, string, any>,
-	string,
-	string
-> {
-	yield optionalWhitespace
+const commentParser: Parser<TopLevelResult, string, EmptyObject> = contextual(
+	function* (): CustomGenerator<Parser<any, string, any>, string, string> {
+		yield optionalWhitespace
 
-	yield str("--")
+		yield str("--")
 
-	yield optionalWhitespace
+		yield optionalWhitespace
 
-	const content = yield regex(/^[^\n]*/)
+		const content = yield regex(/^[^\n]*/)
 
-	yield newLine
+		yield newLine
 
-	return content
-}).map((content): TopLevelResult => {
+		return content
+	}
+).map((content): TopLevelResult => {
 	return { type: "comment", content }
 })
 
-const typeParser: Parser<Type, string, any> = lookAheadSequenceIgnore(
+const typeParser: Parser<Type, string, EmptyObject> = lookAheadSequenceIgnore(
 	str("type"),
 	contextual<Type>(function* (): CustomGenerator<
 		Parser<any, string, any>,
@@ -446,82 +449,84 @@ const typeParser: Parser<Type, string, any> = lookAheadSequenceIgnore(
 	})
 )
 
-const objectParser: Parser<Object, string, any> = lookAheadSequenceIgnore(
-	str("object"),
-	contextual<Object>(function* (): CustomGenerator<
-		Parser<any, string, any>,
-		Object,
-		any
-	> {
-		yield str("object")
+const objectParser: Parser<Object, string, EmptyObject> =
+	lookAheadSequenceIgnore(
+		str("object"),
+		contextual<Object>(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			Object,
+			any
+		> {
+			yield str("object")
 
-		yield whitespace
+			yield whitespace
 
-		const { name }: CustomNameType = yield customTypeNameParser
+			const { name }: CustomNameType = yield customTypeNameParser
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		yield char("{")
+			yield char("{")
 
-		yield optionalWhitespace
-		yield newLine
+			yield optionalWhitespace
+			yield newLine
 
-		const properties: Property[] = yield untilParser(
-			propertyParser,
-			sequenceOf([optionalWhitespace, char("}")])
-		)
+			const properties: Property[] = yield untilParser(
+				propertyParser,
+				sequenceOf([optionalWhitespace, char("}")])
+			)
 
-		yield optionalWhitespace
-		yield char("}")
-		yield optionalWhitespace
-		yield newLine
+			yield optionalWhitespace
+			yield char("}")
+			yield optionalWhitespace
+			yield newLine
 
-		return {
-			type: "object",
-			name: name,
-			properties,
-		}
-	})
-)
+			return {
+				type: "object",
+				name: name,
+				properties,
+			}
+		})
+	)
 
-const moduleParser: Parser<Module, string, any> = lookAheadSequenceIgnore(
-	str("module"),
-	contextual<Module>(function* (): CustomGenerator<
-		Parser<any, string, any>,
-		Module,
-		any
-	> {
-		yield str("module")
+const moduleParser: Parser<Module, string, EmptyObject> =
+	lookAheadSequenceIgnore(
+		str("module"),
+		contextual<Module>(function* (): CustomGenerator<
+			Parser<any, string, any>,
+			Module,
+			any
+		> {
+			yield str("module")
 
-		yield whitespace
+			yield whitespace
 
-		const name: string = yield identifierParser
+			const name: string = yield identifierParser
 
-		yield optionalWhitespace
+			yield optionalWhitespace
 
-		yield char("{")
+			yield char("{")
 
-		yield optionalWhitespace
-		yield newLine
+			yield optionalWhitespace
+			yield newLine
 
-		const properties: Property[] = yield untilParser(
-			propertyParser,
-			sequenceOf([optionalWhitespace, char("}")])
-		)
+			const properties: Property[] = yield untilParser(
+				propertyParser,
+				sequenceOf([optionalWhitespace, char("}")])
+			)
 
-		yield optionalWhitespace
-		yield char("}")
-		yield optionalWhitespace
-		yield newLine
+			yield optionalWhitespace
+			yield char("}")
+			yield optionalWhitespace
+			yield newLine
 
-		return {
-			type: "module",
-			name,
-			properties,
-		}
-	})
-)
-const topLevelParser: Parser<TopLevelResult, string, any> = choice([
+			return {
+				type: "module",
+				name,
+				properties,
+			}
+		})
+	)
+const topLevelParser: Parser<TopLevelResult, string, EmptyObject> = choice([
 	emptyLineParser,
 	commentParser,
 	typeParser,
@@ -529,32 +534,33 @@ const topLevelParser: Parser<TopLevelResult, string, any> = choice([
 	moduleParser,
 ])
 
-export const programmParser = untilEndOfInput(topLevelParser).map(
-	(dataArray: TopLevelResult[]): Program => {
-		//console.log(dataArray)
-		const types: Type[] = []
-		const objects: Object[] = []
-		const modules: Module[] = []
-		for (const data of dataArray) {
-			switch (data.type) {
-				case "type":
-					types.push(data)
-					break
-				case "object":
-					objects.push(data)
-					break
-				case "module":
-					modules.push(data)
-					break
-				default:
-					break
+export const programmParser: Parser<Program, string, EmptyObject> =
+	untilEndOfInput(topLevelParser).map(
+		(dataArray: TopLevelResult[]): Program => {
+			//console.log(dataArray)
+			const types: Type[] = []
+			const objects: Object[] = []
+			const modules: Module[] = []
+			for (const data of dataArray) {
+				switch (data.type) {
+					case "type":
+						types.push(data)
+						break
+					case "object":
+						objects.push(data)
+						break
+					case "module":
+						modules.push(data)
+						break
+					default:
+						break
+				}
+			}
+
+			return {
+				types,
+				objects,
+				modules,
 			}
 		}
-
-		return {
-			types,
-			objects,
-			modules,
-		}
-	}
-)
+	)

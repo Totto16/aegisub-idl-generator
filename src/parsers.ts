@@ -92,7 +92,7 @@ export const optionalWhitespace: Parser<string | null> = possibly(
 	whitespace
 ).map((x) => x || "")
 
-export function untilParser<T, Y>(
+export function untilParser<T, Y, A = any>(
 	parser: Parser<T, string, any>,
 	until: Parser<Y, string, any>
 ) {
@@ -104,9 +104,8 @@ export function untilParser<T, Y>(
 		const result: T[] = []
 		while (true) {
 			const isEndReached: "no" | Y = yield lookAhead(until).errorChain(
-				() => succeedWith("no")
-			) as Parser<T, string, any>
-
+				() => succeedWith("no" as T)
+			)
 			if (isEndReached !== "no") {
 				break
 			}
