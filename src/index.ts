@@ -80,7 +80,7 @@ function replaceExtension(path: string, newExtension: string) {
 	return splitFile.join(".")
 }
 
-async function main() {
+async function main(): Promise<void> {
 	const options = await getOptions()
 
 	const fileName = options.file

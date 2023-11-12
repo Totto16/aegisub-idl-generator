@@ -23,6 +23,27 @@ import {
 
 type EmptyObject = Record<string, never>
 
+type LiteralKeys =
+	| "string"
+	| "void"
+	| "int"
+	| "float"
+	| "number"
+	| "boolean"
+	| "null"
+	| "undefined"
+	| "false"
+	| "true"
+
+interface LiteralType {
+	type: LiteralKeys
+}
+
+interface StringLiteralType {
+	type: "stringLiteral"
+	value: string
+}
+
 interface ArrayType<T extends boolean = true> {
 	type: "array"
 	types: InternalTypeTemplate<T>[]
@@ -38,52 +59,38 @@ interface UnionType<T extends boolean = true> {
 	types: InternalTypeTemplate<T>[]
 }
 
-interface ArgumentsType<T extends boolean = true> {
+export interface ArgumentsType<T extends boolean = true> {
 	type: "arguments"
 	types: InternalTypeTemplate<T>[]
 }
 
 interface FunctionType<T extends boolean = true> {
 	type: "function"
-	arguments: T extends true
-		? ArgumentsType<T> | CustomNameType
-		: ArgumentsType<T>
-	return: InternalType
+	arguments: ArgumentsType<T> | (T extends true ? CustomNameType : never)
+	return: InternalTypeTemplate<T>
 }
 
-type LiteralKeys =
-	| "string"
-	| "void"
-	| "int"
-	| "float"
-	| "number"
-	| "boolean"
-	| "null"
-	| "undefined"
-	| "false"
-	| "true"
-interface LiteralType {
-	type: LiteralKeys
-}
-
-interface StringLiteralType {
-	type: "stringLiteral"
-	value: string
-}
-
-interface CustomNameType {
+export interface CustomNameType {
 	type: "customTypeName"
 	name: string
 }
 
-type InternalTypeTemplate<T extends boolean> =
-	| ArrayType<T>
+interface ObjectType<T extends boolean = true> {
+	type: "object"
+	properties: Property<T>[]
+}
+
+//TODO: ObjectType<T> is never parsed, but instead we use Obejct as property of module!
+export type InternalTypeTemplate<T extends boolean> =
 	| LiteralType
 	| StringLiteralType
+	| ArrayType<T>
 	| OptionalType<T>
 	| UnionType<T>
 	| ArgumentsType<T>
-	| (T extends true ? FunctionType<T> | CustomNameType : FunctionType<T>)
+	| FunctionType<T>
+	| ObjectType<T>
+	| (T extends true ? CustomNameType : never)
 
 export type InternalType = InternalTypeTemplate<true>
 
@@ -314,7 +321,7 @@ const functionParser: Parser<InternalType, string, EmptyObject> =
 
 const newLine: Parser<string, string, EmptyObject> = char("\n")
 
-interface Property<T extends boolean = true> {
+export interface Property<T extends boolean = true> {
 	name: string
 	type: InternalTypeTemplate<T>
 }
