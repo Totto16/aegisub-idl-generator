@@ -80,7 +80,6 @@ interface ObjectType<T extends boolean = true> {
 	properties: Property<T>[]
 }
 
-//TODO: ObjectType<T> is never parsed, but instead we use Obejct as property of module!
 export type InternalTypeTemplate<T extends boolean> =
 	| LiteralType
 	| StringLiteralType
@@ -125,9 +124,7 @@ const stringLiteralParser: Parser<InternalType, string, EmptyObject> =
 				const isPotentialEnd: "no" | '"' | string = yield lookAhead(
 					char('"')
 				).errorChain(() => succeedWith("no"))
-
-				//TODO: in typecheck chek if all escape sequences inside the string are valid e.g. \n vs \i vs \\i
-
+				
 				if (isPotentialEnd === "no") {
 					result.push(yield anyChar)
 				} else {
@@ -369,30 +366,40 @@ interface Comment {
 	content: string
 }
 
+type TypeOrigin = "alias" | "object"
+
 interface Type<T extends boolean = true> {
 	type: "type"
+	origin: TypeOrigin
 	name: string
 	content: InternalTypeTemplate<T>
 }
-
-interface Object<T extends boolean = true> {
-	type: "object"
-	name: string
-	properties: Property<T>[]
-}
-
 interface Module<T extends boolean = true> {
 	type: "module"
 	name: string
 	properties: Property<T>[]
 }
 
-type TopLevelResult = EmptyLine | Comment | Type | Object | Module
+type TopLevelResult = EmptyLine | Comment | Type | Module
 
-export interface Program<T extends boolean = true> {
+export class Program<T extends boolean = true> {
 	types: Type<T>[]
-	objects: Object<T>[]
 	modules: Module<T>[]
+
+	constructor(types: Type<T>[], modules: Module<T>[]) {
+		this.types = types
+		this.modules = modules
+	}
+
+	prettyPrint(indentation: number = 4): void {
+		console.log(
+			JSON.stringify(
+				{ types: this.types, modules: this.modules },
+				undefined,
+				indentation
+			)
+		)
+	}
 }
 
 const emptyLineParser: Parser<TopLevelResult, string, EmptyObject> = sequenceOf(
@@ -450,50 +457,54 @@ const typeParser: Parser<Type, string, EmptyObject> = lookAheadSequenceIgnore(
 
 		return {
 			type: "type",
+			origin: "alias",
 			name,
 			content,
 		}
 	})
 )
 
-const objectParser: Parser<Object, string, EmptyObject> =
-	lookAheadSequenceIgnore(
-		str("object"),
-		contextual<Object>(function* (): CustomGenerator<
-			Parser<any, string, any>,
-			Object,
-			any
-		> {
-			yield str("object")
+const objectParser: Parser<Type, string, EmptyObject> = lookAheadSequenceIgnore(
+	str("object"),
+	contextual<Type>(function* (): CustomGenerator<
+		Parser<any, string, any>,
+		Type,
+		any
+	> {
+		yield str("object")
 
-			yield whitespace
+		yield whitespace
 
-			const { name }: CustomNameType = yield customTypeNameParser
+		const { name }: CustomNameType = yield customTypeNameParser
 
-			yield optionalWhitespace
+		yield optionalWhitespace
 
-			yield char("{")
+		yield char("{")
 
-			yield optionalWhitespace
-			yield newLine
+		yield optionalWhitespace
+		yield newLine
 
-			const properties: Property[] = yield untilParser(
-				propertyParser,
-				sequenceOf([optionalWhitespace, char("}")])
-			)
+		const properties: Property[] = yield untilParser(
+			propertyParser,
+			sequenceOf([optionalWhitespace, char("}")])
+		)
 
-			yield optionalWhitespace
-			yield char("}")
-			yield optionalWhitespace
-			yield newLine
+		yield optionalWhitespace
+		yield char("}")
+		yield optionalWhitespace
+		yield newLine
 
-			return {
+		return {
+			type: "type",
+			origin: "object",
+			name: name,
+			content: {
 				type: "object",
-				name: name,
 				properties,
-			}
-		})
-	)
+			},
+		}
+	})
+)
 
 const moduleParser: Parser<Module, string, EmptyObject> =
 	lookAheadSequenceIgnore(
@@ -546,15 +557,11 @@ export const programmParser: Parser<Program, string, EmptyObject> =
 		(dataArray: TopLevelResult[]): Program => {
 			//console.log(dataArray)
 			const types: Type[] = []
-			const objects: Object[] = []
 			const modules: Module[] = []
 			for (const data of dataArray) {
 				switch (data.type) {
 					case "type":
 						types.push(data)
-						break
-					case "object":
-						objects.push(data)
 						break
 					case "module":
 						modules.push(data)
@@ -564,10 +571,6 @@ export const programmParser: Parser<Program, string, EmptyObject> =
 				}
 			}
 
-			return {
-				types,
-				objects,
-				modules,
-			}
+			return new Program(types, modules)
 		}
 	)

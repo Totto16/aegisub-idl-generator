@@ -11,18 +11,14 @@ import {
 function getType<T extends boolean>(
 	program: Program<T>,
 	name: string
-): undefined | InternalTypeTemplate<T> {
+): null | InternalTypeTemplate<T> {
 	for (const type of program.types) {
 		if (type.name === name) {
 			return type.content
 		}
 	}
 
-	for (const type of program.objects) {
-		if (type.name === name) {
-			return { type: "object", properties: type.properties }
-		}
-	}
+	return null
 }
 
 function resolveType(
@@ -30,8 +26,6 @@ function resolveType(
 	type: InternalType,
 	alreadyTrying: string[]
 ): InternalTypeWithoutCustomNames {
-	console.log("tyring to resolve " + type.type)
-
 	const resolveCustomType = (
 		arg: CustomNameType
 	): InternalTypeWithoutCustomNames => {
@@ -44,7 +38,7 @@ function resolveType(
 
 		const memberType = getType(program, arg.name)
 
-		if (memberType) {
+		if (memberType !== null) {
 			// TODO: we maybe don't store the resolved type, since it may be unresolved in the program, but might be already  resolved...
 			return resolveType(program, memberType, [
 				...alreadyTrying,
@@ -145,24 +139,17 @@ function hasDuplicates<T>(array: T[]): boolean {
 function mergePrograms<T extends boolean = true>(
 	program: Program<T>,
 	newProgram: Program<T>,
-	keys: [keyof Program<T>],
 	preferLast: boolean = true
 ): Program<T> {
-	const result: Program<T> = {
-		types: [],
-		objects: [],
-		modules: [],
-	}
+	const result: Program<T> = new Program<T>([], [])
 
-	for (const key of getUnique(keys)) {
-		const [first, second] = preferLast
-			? [newProgram, program]
-			: [program, newProgram]
+	const [first, second] = preferLast
+		? [newProgram, program]
+		: [program, newProgram]
 
-		for (const elem of [...first[key], ...second[key]]) {
-			if (!result[key].map(({ name }) => name).includes(elem.name)) {
-				result[key].push(elem as any)
-			}
+	for (const elem of [...first.types, ...second.types]) {
+		if (!result.types.map(({ name }) => name).includes(elem.name)) {
+			result.types.push(elem as any)
 		}
 	}
 
@@ -172,48 +159,35 @@ function mergePrograms<T extends boolean = true>(
 export function typeCheck(program: Program): Program<false> {
 	// multi-pass typechecking
 
-	const newProgram: Program<false> = {
-		types: [],
-		objects: [],
-		modules: [],
-	}
+	const newProgram: Program<false> = new Program<false>([], [])
 
 	// check if we have duplicate types (types and objects)
 
 	const typeNames = program.types.map(({ name }) => name)
-
-	const objectTypeNames = program.objects.map(({ name }) => name)
 
 	if (hasDuplicates(typeNames)) {
 		console.error("The type names have duplicates, that is not allowed!")
 		process.exit(3)
 	}
 
-	if (hasDuplicates(objectTypeNames)) {
-		console.error("The objects names have duplicates, that is not allowed!")
-		process.exit(3)
-	}
-
-	if (hasDuplicates([...typeNames, ...objectTypeNames])) {
-		console.error(
-			"The type names (objects + types) have duplicates, that is not allowed!"
-		)
-		process.exit(3)
-	}
-
 	// resolve custom Types in custom Types
-	for (const { type, content, name } of program.types) {
-		console.log(name + "\n")
+	for (const { type, content, name, origin } of program.types) {
 		const newType = resolveType(
-			mergePrograms(program, newProgram, ["types"], true),
+			mergePrograms(program, newProgram, true),
 			content,
 			[name]
 		)
-		console.log(name, newType)
-		newProgram.types.push({ type, name, content: newType })
+		newProgram.types.push({ type, name, content: newType, origin })
 	}
 
-	//TODO
+	//TODO resolve modules
 
-	process.exit(1)
+	//TODO checks these things:
+	// each function can only have type arguments or union<...arguments>
+	// all escape sequences inside StringLiterals should be valid e.g. \n vs \i vs \\i
+
+	//TODO: optional is only allowed in arguments or properties, and also if it'S there inside a union of only optionals, this is a harder and can also be ignored, since optional means  ?: in ts and can be replaced with  "T | undefined" in other places
+	// optionals are trailing in function arguments
+
+	return newProgram
 }
