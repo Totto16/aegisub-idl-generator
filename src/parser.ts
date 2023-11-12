@@ -39,7 +39,7 @@ interface LiteralType {
 	type: LiteralKeys
 }
 
-interface StringLiteralType {
+export interface StringLiteralType {
 	type: "stringLiteral"
 	value: string
 }

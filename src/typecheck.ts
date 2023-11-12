@@ -6,11 +6,12 @@ import {
 	InternalTypeWithoutCustomNames,
 	Program,
 	Property,
+	StringLiteralType,
 	UnionType,
 } from "./parser"
 
 //TODO: later to pretty print we have take a location or multiple
-function typeChecKError(message: string): never {
+function typeCheckError(message: string): never {
 	console.error(message)
 	process.exit(3)
 }
@@ -28,6 +29,20 @@ function getType<T extends boolean>(
 	return null
 }
 
+function checkStringLiteral(literal: StringLiteralType): void {
+	//from: https://github.com/kach/nearley/blob/6e24450f2b19b5b71557adf72ccd580f4e452b09/examples/json.ne#L10C12-L10C62
+	// slightly modified
+	const match = literal.value.match(
+		/(?:\\["bfnrt\/\\0]|\\u[a-fA-F0-9]{4}|[^"\\])*/
+	)
+
+	if (match == null) {
+		typeCheckError(
+			`String Literal '${literal.value}' contains invalid escape Sequences!`
+		)
+	}
+}
+
 function resolveType(
 	program: Program,
 	type: InternalType,
@@ -37,7 +52,7 @@ function resolveType(
 		arg: CustomNameType
 	): InternalTypeWithoutCustomNames => {
 		if (alreadyTrying !== false && alreadyTrying.includes(arg.name)) {
-			typeChecKError(
+			typeCheckError(
 				`Circular type dependency detected on custom type '${arg.name}'`
 			)
 		}
@@ -53,7 +68,7 @@ function resolveType(
 			)
 		} else {
 			if (alreadyTrying === false) {
-				typeChecKError(
+				typeCheckError(
 					`Trying to resolve a custom type, after all were resolved: type '${arg.name}' could not be resolved!`
 				)
 			}
@@ -74,7 +89,9 @@ function resolveType(
 		case "undefined":
 		case "false":
 		case "true":
+			return type
 		case "stringLiteral":
+			checkStringLiteral(type)
 			return type
 
 		case "array":
@@ -122,14 +139,14 @@ function resolveType(
 						ArgumentsType<false>
 					>
 				} else {
-					typeChecKError(
+					typeCheckError(
 						`Function type error: function arguments can only have type 'union<...arguments>' or 'but have type 'union<${unionTypes.join(
 							", "
 						)}>'`
 					)
 				}
 			} else {
-				typeChecKError(
+				typeCheckError(
 					`Function type error: function arguments can only have type 'arguments' or 'union<...arguments>' but have type '${temp.type}'`
 				)
 			}
@@ -196,7 +213,7 @@ export function typeCheck(program: Program): Program<false> {
 	const typeNames = program.types.map(({ name }) => name)
 
 	if (hasDuplicates(typeNames)) {
-		typeChecKError("The type names have duplicates, that is not allowed!")
+		typeCheckError("The type names have duplicates, that is not allowed!")
 	}
 
 	// resolve custom Types in custom Types
@@ -226,9 +243,6 @@ export function typeCheck(program: Program): Program<false> {
 	}
 
 	//TODO checks these things:
-	// each function can only have type arguments or union<...arguments>
-	// all escape sequences inside StringLiterals should be valid e.g. \n vs \i vs \\i
-
 	//TODO: optional is only allowed in arguments or properties, and also if it'S there inside a union of only optionals, this is a harder and can also be ignored, since optional means  ?: in ts and can be replaced with  "T | undefined" in other places
 	// optionals are trailing in function arguments
 
